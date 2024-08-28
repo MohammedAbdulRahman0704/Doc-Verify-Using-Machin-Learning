@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload and Plagiarism Check</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <button id="themeButton">Theme</button>
+  <div class="container">
+      <h2>File Upload and Plagiarism Check</h2>
+      <form id="fileNumberForm" method="post" action="/set_file_count">
+          <label for="fileCount">How many files do you want to upload?</label>
+          <input type="number" id="fileCount" name="fileCount" min="2" required>
+          <input type="submit" value="Set File Count">
+      </form>
+      <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" style="display:none;">
+          <div id="fileInputs"></div>
+          <div id="fileDisplay"></div>
+          <input type="hidden" id="choice" name="choice">
+          <input type="submit" value="Check Plagiarism" onclick="return confirmChoice()">
+      </form>
+      <div class="flash">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <p>{{ message }}</p>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="highlighted-files">
+        {% if files %}
+            {% for file in files %}
+                <div class="file-info">
+                    {% if file.choice == 'similarity' %}
+                        <p>Files {{ file.first_file_name }} and {{ file.second_file_name }} have a similarities score of {{ '%.2f' % file.similarity_score }}</p>
+                    {% else %}
+                        <p>Files {{ file.first_file_name }} and {{ file.second_file_name }} have a differences score of {{ '%.2f' % file.similarity_score }}</p>
+                    {% endif %}
+                    <a href="{{ url_for('download_highlighted_file', filename=file.highlighted_file) }}" target="_blank">View highlighted file: {{ file.highlighted_file }}</a>
+                </div>
+            {% endfor %}
+            <button onclick="window.location.href='/reset'">Reset</button>
+        {% endif %}
+
+        {% if results %}
+            {% for result in results %}
+                <div class="file-info">
+                    {% if result.choice == 'similarity' %}
+                        <p>Files {{ result.first_file_name }} and {{ result.second_file_name }} have a similarities score of {{ '%.2f' % result.similarity_score }}</p>
+                    {% else %}
+                        <p>Files {{ result.first_file_name }} and {{ result.second_file_name }} have a differences score of {{ '%.2f' % result.similarity_score }}</p>
+                    {% endif %}
+                    <a href="{{ url_for('download_highlighted_file', filename=result.highlighted_file) }}" target="_blank">View highlighted file: {{ result.highlighted_file }}</a>
+                </div>
+            {% endfor %}
+            <button onclick="window.location.href='/reset'">Reset</button>
+        {% endif %}
+    </div>
+    <!-- Progress Bar Container -->
+    <div class="progress-container">
+        <div class="progress-bar">
+            <div class="progress-bar-fill" id="progressBar" style="width: 0;"></div>
+        </div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+  <script>
+      var socket = io();
+
+      // Handle file number form submission
+      document.getElementById('fileNumberForm').addEventListener('submit', function(e) {
+          e.preventDefault();
+          var fileCount = document.getElementById('fileCount').value;
+          var fileInputsDiv = document.getElementById('fileInputs');
+          fileInputsDiv.innerHTML = '';
+          for (var i = 1; i <= fileCount; i++) {
+              var label = document.createElement('label');
+              label.textContent = 'Choose file ' + i + ':';
+              var input = document.createElement('input');
+              input.type = 'file';
+              input.name = 'file' + i;
+              input.accept = '.txt, .docx, .pdf, .rtf, .odt, .html, .xml, .csv';
+              input.required = true;
+              input.onchange = function() { displayChosenFiles(this); }; // Added onchange event
+              fileInputsDiv.appendChild(label);
+              fileInputsDiv.appendChild(input);
+          }
+          document.getElementById('fileNumberForm').style.display = 'none';
+          document.getElementById('uploadForm').style.display = 'block';
+      });
+
+      // Display chosen files
+      function displayChosenFiles(input) {
+          var fileDisplay = document.getElementById('fileDisplay');
+          fileDisplay.innerHTML = '';
+
+          for (var i = 0; i < input.files.length; ++i) {
+              var fileName = input.files.item(i).name;
+              var para = document.createElement('p');
+              para.textContent = 'Chosen file: ' + fileName;
+              fileDisplay.appendChild(para);
+          }
+      }
+
+      // Confirm choice for similarity or difference
+      function confirmChoice() {
+          var choice = confirm("Do you want to check for similarities? Click 'OK' for similarities, 'Cancel' for differences.");
+          document.getElementById('choice').value = choice ? 'similarity' : 'difference';
+          return true;
+      }
+
+      // Update progress bar with socket data
+      socket.on('progress_update', function(data) {
+          console.log('Progress:', data.progress);
+          // Update progress bar width based on received progress percentage
+          document.getElementById('progressBar').style.width = data.progress + '%';
+      });
+
+      // Handle theme button click
+      const themeButton = document.getElementById("themeButton");
+      const body = document.body;
+
+      // Set the initial theme based on localStorage
+      const currentTheme = localStorage.getItem("theme");
+      if (currentTheme) {
+          body.classList.add(currentTheme);
+      }
+
+      const themes = [
+          "dark-mode",
+          "soft-pastels",
+          "earth-tones",
+          "monochrome",
+          "zen-garden",
+          "aqua-tones",
+      ];
+
+      themeButton.addEventListener("click", () => {
+          let currentTheme = body.classList[0] || "dark-mode"; // Default to 'dark-mode' if no theme is set
+          let currentIndex = themes.indexOf(currentTheme);
+          let nextIndex = (currentIndex + 1) % themes.length;
+          let newTheme = themes[nextIndex];
+
+          body.classList.replace(currentTheme, newTheme);
+          themeButton.classList.replace(currentTheme, newTheme);
+          localStorage.setItem("theme", newTheme);
+      });
+
+      // Load the saved theme on page load
+      document.addEventListener("DOMContentLoaded", () => {
+          const savedTheme = localStorage.getItem("theme");
+          if (savedTheme) {
+              body.classList.add(savedTheme);
+          }
+      });
+  </script>
+</body>
+</html>
